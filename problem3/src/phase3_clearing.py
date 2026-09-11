@@ -98,11 +98,12 @@ def phase3_patrol_and_clear(targets: List, robot, enable_2opt: bool = False) -> 
     # 步骤3：兜底验证
     print(f"\n步骤3：兜底验证...")
 
-    remaining_channels = final_verification_scan(robot, cleared)
+    # 增强版：接收遗漏频道列表和检测数据
+    remaining_channels, channel_detections = final_verification_scan(robot, cleared)
 
     if remaining_channels:
         print(f"\n发现遗漏，启动补救...")
-        success_count = clear_remaining_sources(robot, remaining_channels)
+        success_count = clear_remaining_sources(robot, remaining_channels, channel_detections)
 
         # 更新统计
         if success_count > 0:

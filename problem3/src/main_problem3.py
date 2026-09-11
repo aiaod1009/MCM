@@ -11,6 +11,7 @@ import sys
 import os
 import json
 from datetime import datetime
+import io
 
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
@@ -21,39 +22,79 @@ from phase2_localization import phase2_localization
 from phase3_clearing import phase3_patrol_and_clear
 
 
-def main(robot_id: str, save_results: bool = True):
+class TeeLogger:
+    """同时输出到终端和文件的日志类"""
+    def __init__(self, log_file):
+        self.terminal = sys.stdout
+        self.log = open(log_file, 'w', encoding='utf-8')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()  # 实时写入
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
+
+
+def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
     """
     问题3主程序
 
     参数:
         robot_id: 参赛队号
         save_results: 是否保存结果
+        log_to_file: 是否保存日志到文件
 
     返回:
         results: 完整结果字典
     """
-    print("\n" + "="*60)
-    print("问题3：自动搜索定位并清除全向干扰源")
-    print("="*60)
-    print(f"参赛队号: {robot_id}")
-    print(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*60 + "\n")
+    # 设置日志
+    logger = None
+    if log_to_file:
+        # 创建test_logs目录
+        log_dir = os.path.join(os.path.dirname(__file__), '..', 'test_logs')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+            print(f"创建日志目录: test_logs/")
 
-    # 创建机器狗客户端
-    print("连接模拟器...")
-    robot = SimulatorClient(base_url="http://127.0.0.1:2026", robot_id=robot_id)
+        # 生成日志文件名（带时间戳）
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_file = os.path.join(log_dir, f'test_log_{timestamp}.txt')
 
-    # 进入目标区域
-    print("正在进入目标区域...")
-    enter_result = robot.enter()
+        # 重定向stdout到日志文件
+        logger = TeeLogger(log_file)
+        sys.stdout = logger
 
-    if enter_result.get('code') != 0:
-        print(f"✗ 进入失败: {enter_result.get('message')}")
-        return None
-
-    print(f"✓ 成功进入目标区域")
+        print(f"日志保存路径: test_logs/test_log_{timestamp}.txt")
+        print()
 
     try:
+        print("\n" + "="*60)
+        print("问题3：自动搜索定位并清除全向干扰源")
+        print("="*60)
+        print(f"参赛队号: {robot_id}")
+        print(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("="*60 + "\n")
+
+        # 创建机器狗客户端
+        print("连接模拟器...")
+        robot = SimulatorClient(base_url="http://127.0.0.1:2026", robot_id=robot_id)
+
+        # 进入目标区域
+        print("正在进入目标区域...")
+        enter_result = robot.enter()
+
+        if enter_result.get('code') != 0:
+            print(f"✗ 进入失败: {enter_result.get('message')}")
+            return None
+
+        print(f"✓ 成功进入目标区域")
+
         # ================================================================
         # 阶段1：枚举频道扫描
         # ================================================================
@@ -66,8 +107,8 @@ def main(robot_id: str, save_results: bool = True):
         # 使用FrequencyScan类
         scanner = FrequencyScan(robot)
 
-        # 执行智能快速扫描（配合阶段3兜底验证，总体更快）
-        scan_result_obj = scanner.run(strategy='smart')
+        # 执行混合策略扫描（9个点全扫，确保高检测率）
+        scan_result_obj = scanner.run(strategy='hybrid')
 
         # 转换为阶段2需要的格式
         phase1_result = {
@@ -165,7 +206,7 @@ def main(robot_id: str, save_results: bool = True):
             phase3_result = phase3_patrol_and_clear(
                 targets,
                 robot,
-                enable_2opt=False  # 可选：启用2-opt优化
+                enable_2opt=True  # 启用2-opt路径优化，减少移动时间
             )
 
             print(f"\n阶段3完成：")
@@ -254,6 +295,12 @@ def main(robot_id: str, save_results: bool = True):
         print(f"\n清理资源...")
         robot.exit()
 
+        # 恢复stdout并关闭日志文件
+        if logger:
+            sys.stdout = logger.terminal
+            logger.close()
+            print(f"\n日志已保存到: test_logs/test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+
 
 if __name__ == '__main__':
     import argparse
@@ -261,6 +308,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='问题3：自动搜索定位并清除全向干扰源')
     parser.add_argument('robot_id', type=str, nargs='?', help='参赛队号')
     parser.add_argument('--no-save', action='store_true', help='不保存结果')
+    parser.add_argument('--no-log', action='store_true', help='不保存日志到文件')
 
     args = parser.parse_args()
 
@@ -275,4 +323,4 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # 运行主程序
-    main(robot_id, save_results=not args.no_save)
+    main(robot_id, save_results=not args.no_save, log_to_file=not args.no_log)

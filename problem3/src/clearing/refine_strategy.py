@@ -18,7 +18,7 @@ def spiral_search(robot, target, search_radius: float = 20, step: float = 10) ->
     参数:
         robot: 机器狗对象
         target: 目标对象
-        search_radius: 搜索半径（米），默认20米（清除半径上限）
+        search_radius: 搜索半径（米），默认20米，最大可到40米
         step: 步长（米）
 
     返回:
@@ -29,13 +29,14 @@ def spiral_search(robot, target, search_radius: float = 20, step: float = 10) ->
         从中心向外螺旋搜索
 
     适用场景:
-        定位区域直径<40米的小范围搜索
+        定位区域直径<80米的中等范围搜索
 
     注意:
-        清除半径为20米，搜索半径不应超过20米
+        搜索半径可以大于清除半径20米
+        因为清除指令可以远程触发（不需要靠近目标）
     """
-    # 确保搜索半径不超过清除半径20米
-    search_radius = min(search_radius, 20.0)
+    # 允许更大的搜索半径（最大40米）
+    search_radius = min(search_radius, 40.0)
 
     print(f"    → 螺旋搜索（半径{search_radius:.1f}米，步长{step:.1f}米）")
 
@@ -131,15 +132,17 @@ def refine_and_retry(robot, target) -> bool:
         sample_points = target.hull[:min(3, len(target.hull))]
         print(f"      使用凸包顶点作为采样点（{len(sample_points)}个）")
     else:
-        # 如果没有凸包，在中心周围采样
-        radius = target.diameter / 2
+        # 如果没有凸包，在中心周围扩大采样
+        # 采样半径：直径的一半，但至少30米（确保覆盖范围）
+        base_radius = target.diameter / 2
+        radius = max(base_radius, 30.0)  # 至少30米
         angles = [0, 120, 240]  # 三个方向
         sample_points = [
             target.center + radius * np.array([np.cos(np.deg2rad(a)),
                                                 np.sin(np.deg2rad(a))])
             for a in angles
         ]
-        print(f"      在中心周围采样3个点（半径{radius:.1f}米）")
+        print(f"      在中心周围采样3个点（半径{radius:.1f}米，原直径{target.diameter:.1f}米）")
 
     # 步骤2：补充测向
     new_measurements = []
