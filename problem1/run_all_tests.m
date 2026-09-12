@@ -12,9 +12,14 @@ addpath('visualization');
 % 测试用例列表
 test_cases = {
     'test_data/sample_case1.mat', '简单三角形配置';
-    'test_data/sample_case2.mat', '复杂五边形配置';
-    'test_data/sample_case3_minimal.mat', '双点最小配置'
+    'test_data/sample_case2.mat', '五检测点配置(±1°)';
+    'test_data/sample_case3_minimal.mat', '双点最小配置';
+    'test_data/sample_case4_equilateral.mat', '等边三检测点(圆盖不住反例)'
 };
+
+% 角度容差（度）：交会区域顶点必然落在约束边界上，需容差避免浮点误杀
+% 【修正 2026-09-12】原脚本漏传该容差，会重现案例1/案例3 的错误结果。
+ang_tol = 1e-9;
 
 % 统计信息
 total_cases = size(test_cases, 1);
@@ -83,7 +88,9 @@ for idx = 1:total_cases
         %% 4. 筛选有效顶点
         valid_vertices = [];
         for k = 1:size(candidates, 1)
-            if point_in_sectors(candidates(k,:), detectors, azimuths, error_range)
+            % 【修正 2026-09-12】传入角度容差，避免落在约束边界上的顶点被
+            % atan2d 的浮点误差误杀（这是原版直径严重偏小的根因）
+            if point_in_sectors(candidates(k,:), detectors, azimuths, error_range, ang_tol)
                 valid_vertices = [valid_vertices; candidates(k,:)];
             end
         end

@@ -19,9 +19,10 @@ addpath('visualization');
 
 %% 1. 加载输入数据
 % 可以修改这里选择不同的测试用例
-% test_data/sample_case1.mat - 简单三角形配置
-% test_data/sample_case2.mat - 复杂五边形配置
-% test_data/sample_case3_minimal.mat - 最简双点配置
+% test_data/sample_case1.mat - 三检测点三角形配置（±1°）
+% test_data/sample_case2.mat - 五检测点配置（±1°，中心检测点本身为区域顶点）
+% test_data/sample_case3_minimal.mat - 最简双点配置（±1°）
+% test_data/sample_case4_equilateral.mat - 等边三检测点，"圆盖不住"反例（±1°）
 
 data_file = 'test_data/sample_case1.mat';
 
@@ -32,13 +33,18 @@ end
 input_data = load(data_file);
 detectors = input_data.detectors;
 azimuths = input_data.azimuths;
-error = input_data.error;
+% 【修正 2026-09-12】原变量名 error 会覆盖 MATLAB 内置函数 error()，
+% 导致第 4 步"未找到有效顶点"的错误分支无法正常抛出，故改名 angle_err。
+angle_err = input_data.error;
 n = size(detectors, 1);
+
+% 角度容差（度）：交会区域的顶点必然落在约束边界上，需容差避免浮点误杀
+ang_tol = 1e-9;
 
 fprintf('=== 问题1：定位区域直径计算 ===\n');
 fprintf('数据文件: %s\n', data_file);
 fprintf('检测点数量: %d\n', n);
-fprintf('误差范围: ±%.1f度\n\n', error);
+fprintf('误差范围: ±%.1f度\n\n', angle_err);
 
 %% 2. 构造边界射线
 fprintf('【步骤1】构造边界射线...\n');
@@ -50,7 +56,7 @@ for i = 1:n
     % 左边界射线
     ray_count = ray_count + 1;
     rays(ray_count).origin = detectors(i, :);
-    rays(ray_count).theta = mod(azimuths(i) - error, 360);
+    rays(ray_count).theta = mod(azimuths(i) - angle_err, 360);
     rays(ray_count).direction = [cosd(rays(ray_count).theta), ...
                                   sind(rays(ray_count).theta)];
     rays(ray_count).type = 'left';
@@ -59,7 +65,7 @@ for i = 1:n
     % 右边界射线
     ray_count = ray_count + 1;
     rays(ray_count).origin = detectors(i, :);
-    rays(ray_count).theta = mod(azimuths(i) + error, 360);
+    rays(ray_count).theta = mod(azimuths(i) + angle_err, 360);
     rays(ray_count).direction = [cosd(rays(ray_count).theta), ...
                                   sind(rays(ray_count).theta)];
     rays(ray_count).type = 'right';
@@ -76,6 +82,12 @@ intersection_count = 0;
 
 for i = 1:(ray_count-1)
     for j = (i+1):ray_count
+        % 【修正 2026-09-12】同一检测点的左右两条边界射线交于该检测点自身
+        % （t1=t2=0），该点必须保留为候选点：当该检测点同时落在其余所有检测点
+        % 的扇形内时，它本身就是定位区域的一个顶点（楔形顶点）。
+        % 例如案例2 的中心检测点 (100,100) 即为区域顶点，若在此跳过会使有效顶点
+        % 只剩 3 个、直径由正确的 3.4311 m 误算为 0.1178 m，故不做跳过，
+        % 交由第4步的可行性筛选判断去留。
         [P, is_valid] = ray_intersection(rays(i).origin, rays(i).direction, ...
                                           rays(j).origin, rays(j).direction);
         if is_valid
@@ -92,7 +104,9 @@ fprintf('\n【步骤3】筛选有效顶点（在所有扇形内的点）...\n');
 
 valid_vertices = [];
 for k = 1:size(candidates, 1)
-    if point_in_sectors(candidates(k,:), detectors, azimuths, error)
+    % 【修正 2026-09-12】传入角度容差 ang_tol，避免落在约束边界上的
+    % 顶点被 atan2d 的浮点误差误杀（这是原版直径严重偏小的根因）。
+    if point_in_sectors(candidates(k,:), detectors, azimuths, angle_err, ang_tol)
         valid_vertices = [valid_vertices; candidates(k,:)];
     end
 end
@@ -174,7 +188,7 @@ fprintf('\n【步骤7】生成可视化图形...\n');
 [~, case_name, ~] = fileparts(data_file);
 output_filename = sprintf('results/problem1_%s.png', case_name);
 
-plot_localization_region(detectors, azimuths, error, hull, D, V_p, V_q, output_filename);
+plot_localization_region(detectors, azimuths, angle_err, hull, D, V_p, V_q, output_filename);
 
 %% 9. 保存结果
 fprintf('\n【步骤8】保存计算结果...\n');
@@ -184,7 +198,7 @@ results.data_file = data_file;
 results.n_detectors = n;
 results.detectors = detectors;
 results.azimuths = azimuths;
-results.error = error;
+results.angle_err = angle_err;
 results.n_valid_vertices = size(valid_vertices, 1);
 results.hull = hull;
 results.diameter = D;
@@ -206,7 +220,7 @@ fid = fopen(result_txt_file, 'w');
 fprintf(fid, '=== 问题1：定位区域直径计算结果 ===\n\n');
 fprintf(fid, '数据文件: %s\n', data_file);
 fprintf(fid, '检测点数量: %d\n', n);
-fprintf(fid, '误差范围: ±%.1f度\n\n', error);
+fprintf(fid, '误差范围: ±%.1f度\n\n', angle_err);
 
 fprintf(fid, '--- 检测点信息 ---\n');
 for i = 1:n

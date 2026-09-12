@@ -1,5 +1,5 @@
 function plot_localization_region(detectors, azimuths, error, hull, D, V_p, V_q, filename)
-% PLOT_LOCALIZATION_REGION 绘制定位区域、边界射线、凸包、直径
+% PLOT_LOCALIZATION_REGION 绘制定位区域、边界射线、凸包、直径与覆盖圆
 %
 % 输入:
 %   detectors - 检测点坐标矩阵 n×2
@@ -13,108 +13,140 @@ function plot_localization_region(detectors, azimuths, error, hull, D, V_p, V_q,
 %
 % 输出:
 %   保存图片到指定文件
+%
+% 【改写 2026-09-12】改为双面板布局：左图给出检测点、示向度边界射线与定位
+%   区域的全局相对位置，右图放大了定位区域本身、区域直径与覆盖圆。
+%   原因是交会定位区域的尺度通常比检测点间距小 1~2 个数量级（实测案例中
+%   最小相差约 29 倍），单面板视图下定位区域会被压缩成难以辨认的一点。
 
-    % 创建图形窗口
-    figure('Position', [100, 100, 800, 800]);
-    hold on;
-    axis equal;
-    grid on;
+    figure('Position', [80, 80, 1100, 540]);
 
-    n = size(detectors, 1);
-
-    % 计算射线显示长度（根据场景自适应）
     if D > 0
         ray_length = max(1000, D * 2);
     else
         ray_length = 1000;
     end
 
-    %% 1. 绘制边界射线
+    has_hull = ~isempty(hull) && size(hull, 1) > 0;
+
+    %% ---------- 左面板：全局视图 ----------
+    ax1 = subplot(1, 2, 1);
+    hold(ax1, 'on'); axis(ax1, 'equal'); grid(ax1, 'on');
+    [h_rayL, h_rayR, h_rayC, h_det, h_hull, h_diam, h_circle] = ...
+        draw_scene(ax1, detectors, azimuths, error, hull, D, V_p, V_q, ray_length);
+
+    title(ax1, '全局视图', 'FontSize', 14);
+    xlabel(ax1, 'X (米)', 'FontSize', 12);
+    ylabel(ax1, 'Y (米)', 'FontSize', 12);
+    set(ax1, 'FontSize', 11);
+
+    % 图例：逐项绑定句柄，避免依赖绘制顺序造成错位
+    h_list = []; lab_list = {};
+    if ~isempty(h_rayL), h_list(end+1) = h_rayL; lab_list{end+1} = '左边界射线'; end
+    if ~isempty(h_rayR), h_list(end+1) = h_rayR; lab_list{end+1} = '右边界射线'; end
+    if ~isempty(h_rayC), h_list(end+1) = h_rayC; lab_list{end+1} = '示向度中心'; end
+    if ~isempty(h_det),  h_list(end+1) = h_det;  lab_list{end+1} = '检测点'; end
+    if ~isempty(h_hull), h_list(end+1) = h_hull; lab_list{end+1} = '定位区域'; end
+    if ~isempty(h_diam), h_list(end+1) = h_diam; lab_list{end+1} = '区域直径'; end
+    if ~isempty(h_circle)
+        h_list(end+1) = h_circle; lab_list{end+1} = '覆盖圆(以D为直径)';
+    end
+    legend(ax1, h_list, lab_list, 'Location', 'southoutside', ...
+           'Orientation', 'horizontal', 'NumColumns', 4, 'FontSize', 9);
+
+    if has_hull
+        all_pts = [detectors; hull];
+        span = max(max(all_pts) - min(all_pts));
+        pad = max(span * 0.10, eps);
+        xlim(ax1, [min(all_pts(:,1)) - pad, max(all_pts(:,1)) + pad]);
+        ylim(ax1, [min(all_pts(:,2)) - pad, max(all_pts(:,2)) + pad]);
+    end
+
+    %% ---------- 右面板：定位区域放大 ----------
+    ax2 = subplot(1, 2, 2);
+    hold(ax2, 'on'); axis(ax2, 'equal'); grid(ax2, 'on');
+    draw_scene(ax2, detectors, azimuths, error, hull, D, V_p, V_q, ray_length);
+
+    title(ax2, sprintf('定位区域放大 (D = %.4f 米)', D), 'FontSize', 14);
+    xlabel(ax2, 'X (米)', 'FontSize', 12);
+    ylabel(ax2, 'Y (米)', 'FontSize', 12);
+    set(ax2, 'FontSize', 11);
+
+    if has_hull
+        pad = max(D * 0.45, 0.5);
+        xlim(ax2, [min(hull(:,1)) - pad, max(hull(:,1)) + pad]);
+        ylim(ax2, [min(hull(:,2)) - pad, max(hull(:,2)) + pad]);
+    end
+
+    % 放大视图下坐标范围很小，用两位小数刻度避免标签重复
+    xtickformat(ax2, '%.2f');
+    ytickformat(ax2, '%.2f');
+
+    % 以高分辨率、紧边界导出，避免四周留白并保证缩放后文字清晰
+    try
+        exportgraphics(gcf, filename, 'Resolution', 200, 'BackgroundColor', 'white');
+    catch
+        saveas(gcf, filename);
+    end
+    fprintf('图片已保存: %s\n', filename);
+end
+
+
+function [h_rayL, h_rayR, h_rayC, h_det, h_hull, h_diam, h_circle] = ...
+        draw_scene(ax, detectors, azimuths, error, hull, D, V_p, V_q, ray_length)
+% DRAW_SCENE 在指定坐标轴上绘制全部几何元素，并返回句柄供图例绑定
+
+    n = size(detectors, 1);
+
+    h_rayL = []; h_rayR = []; h_rayC = [];
     for i = 1:n
         origin = detectors(i, :);
 
-        % 左边界射线（红色虚线）
-        theta_L = azimuths(i) - error;
-        dir_L = [cosd(theta_L), sind(theta_L)];
-        endpoint_L = origin + ray_length * dir_L;
-        plot([origin(1), endpoint_L(1)], [origin(2), endpoint_L(2)], ...
-             'r--', 'LineWidth', 0.5);
+        % 左、右边界射线
+        for k = 1:2
+            th = azimuths(i) + (2*k - 3) * error;   % k=1: -error, k=2: +error
+            endpoint = origin + ray_length * [cosd(th), sind(th)];
+            if k == 1
+                h = plot(ax, [origin(1), endpoint(1)], [origin(2), endpoint(2)], ...
+                         'r--', 'LineWidth', 0.5);
+                if i == 1, h_rayL = h; end
+            else
+                h = plot(ax, [origin(1), endpoint(1)], [origin(2), endpoint(2)], ...
+                         'b--', 'LineWidth', 0.5);
+                if i == 1, h_rayR = h; end
+            end
+        end
 
-        % 右边界射线（蓝色虚线）
-        theta_R = azimuths(i) + error;
-        dir_R = [cosd(theta_R), sind(theta_R)];
-        endpoint_R = origin + ray_length * dir_R;
-        plot([origin(1), endpoint_R(1)], [origin(2), endpoint_R(2)], ...
-             'b--', 'LineWidth', 0.5);
-
-        % 中心示向度射线（黑色实线）
-        dir_C = [cosd(azimuths(i)), sind(azimuths(i))];
-        endpoint_C = origin + ray_length * dir_C;
-        plot([origin(1), endpoint_C(1)], [origin(2), endpoint_C(2)], ...
-             'k-', 'LineWidth', 1.5);
+        % 中心示向度射线
+        endpoint = origin + ray_length * [cosd(azimuths(i)), sind(azimuths(i))];
+        h = plot(ax, [origin(1), endpoint(1)], [origin(2), endpoint(2)], ...
+                 'k-', 'LineWidth', 1.2);
+        if i == 1, h_rayC = h; end
     end
 
-    %% 2. 绘制检测点（黄色圆点）
-    plot(detectors(:,1), detectors(:,2), 'ko', ...
-         'MarkerFaceColor', 'yellow', 'MarkerSize', 10);
+    % 检测点
+    h_det = plot(ax, detectors(:,1), detectors(:,2), 'ko', ...
+                 'MarkerFaceColor', 'yellow', 'MarkerSize', 8);
 
-    %% 3. 绘制凸包（定位区域）
+    % 定位区域（凸包）
+    h_hull = [];
     if ~isempty(hull) && size(hull, 1) > 0
-        % 闭合多边形
         hull_closed = [hull; hull(1,:)];
-
-        % 填充定位区域（青色半透明）
-        fill(hull_closed(:,1), hull_closed(:,2), 'cyan', ...
-             'FaceAlpha', 0.3, 'EdgeColor', 'blue', 'LineWidth', 2);
+        h_hull = fill(ax, hull_closed(:,1), hull_closed(:,2), 'cyan', ...
+                      'FaceAlpha', 0.35, 'EdgeColor', 'blue', 'LineWidth', 1.5);
     end
 
-    %% 4. 绘制直径
+    % 直径与覆盖圆
+    h_diam = []; h_circle = [];
     if D > 0
-        % 直径线段（洋红色粗线）
-        plot([V_p(1), V_q(1)], [V_p(2), V_q(2)], ...
-             'm-', 'LineWidth', 3);
+        h_diam = plot(ax, [V_p(1), V_q(1)], [V_p(2), V_q(2)], 'm-', 'LineWidth', 2.5);
+        plot(ax, V_p(1), V_p(2), 'mo', 'MarkerFaceColor', 'magenta', 'MarkerSize', 7);
+        plot(ax, V_q(1), V_q(2), 'mo', 'MarkerFaceColor', 'magenta', 'MarkerSize', 7);
 
-        % 直径端点（洋红色圆点）
-        plot(V_p(1), V_p(2), 'mo', ...
-             'MarkerFaceColor', 'magenta', 'MarkerSize', 8);
-        plot(V_q(1), V_q(2), 'mo', ...
-             'MarkerFaceColor', 'magenta', 'MarkerSize', 8);
-
-        %% 5. 绘制以直径为直径的覆盖圆
         circle_center = (V_p + V_q) / 2;
-        circle_radius = D / 2;
-        theta_circle = linspace(0, 2*pi, 100);
-        circle_x = circle_center(1) + circle_radius * cos(theta_circle);
-        circle_y = circle_center(2) + circle_radius * sin(theta_circle);
-        plot(circle_x, circle_y, 'g-', 'LineWidth', 2);
+        theta_circle = linspace(0, 2*pi, 200);
+        h_circle = plot(ax, circle_center(1) + D/2 * cos(theta_circle), ...
+                            circle_center(2) + D/2 * sin(theta_circle), ...
+                        'g-', 'LineWidth', 1.8);
     end
-
-    %% 6. 添加标注和图例
-    title(sprintf('定位区域与直径 (D = %.2f 米)', D), 'FontSize', 14);
-    xlabel('X (米)', 'FontSize', 12);
-    ylabel('Y (米)', 'FontSize', 12);
-
-    % 图例
-    legend('左边界射线', '右边界射线', '示向度中心', '检测点', ...
-           '定位区域', '直径', '', '', '覆盖圆', ...
-           'Location', 'best');
-
-    %% 7. 自动调整坐标轴范围
-    if ~isempty(hull) && size(hull, 1) > 0
-        x_min = min(hull(:,1));
-        x_max = max(hull(:,1));
-        y_min = min(hull(:,2));
-        y_max = max(hull(:,2));
-
-        % 添加边距
-        margin = max(D * 0.2, 20);
-        xlim([x_min - margin, x_max + margin]);
-        ylim([y_min - margin, y_max + margin]);
-    end
-
-    %% 8. 保存图片
-    saveas(gcf, filename);
-    fprintf('图片已保存: %s\n', filename);
-
-    hold off;
 end
