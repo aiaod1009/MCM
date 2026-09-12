@@ -1,0 +1,22 @@
+{
+  "robot_id": "202619020062",
+  "case_code": null,
+  "program_runtime_s": null,
+  "statistics": {
+    "virtual_time": 0.0,
+    "position": [
+      0.0,
+      0.0
+    ],
+    "current_channel": 1,
+    "total_moves": 0,
+    "total_switches": 0,
+    "total_detections": 0,
+    "total_clears": 0,
+    "program_runtime_s": null,
+    "case_code": null
+  },
+  "enter_response": null,
+  "exit_response": null,
+  "actions": []
+}

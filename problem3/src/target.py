@@ -61,66 +61,40 @@ class Target:
         self.cleared = False
 
         if region_info is not None:
-            # 两点交会定位
+            # 多点交会定位
             self.hull = region_info['hull']
             self.center = region_info['center']
             self.diameter = region_info['diameter']
+            self.cover_radius = region_info.get('cover_radius', self.diameter / 2.0)
             self.confidence = self._compute_confidence_from_region()
         else:
             # 单点估计
             self.hull = None
             self.center = center if center is not None else np.array([0.0, 0.0])
             self.diameter = diameter if diameter is not None else 0.0
+            self.cover_radius = self.diameter / 2.0
             self.confidence = confidence if confidence is not None else 0.5
 
     def _compute_confidence_from_region(self) -> float:
         """
-        基于区域特性计算置信度
+        基于最小覆盖圆半径计算"可直接清除"置信度。
 
-        评分因素:
-            - 直径评分（权重0.5）：直径越小越好
-            - 交会角评分（权重0.3）：越接近90°越好
-            - 基线评分（权重0.2）：800-1000米最佳
+        与问题一定稿模型一致，定位质量直接由最小覆盖圆半径 R_j 决定：
+            R_j <= 20m   → 可直接清除（置信度 1.0）；
+            R_j >  20m   → 需补测精修（置信度按半径衰减）。
+
+        相比旧的多参数加权评分（直径 + 观测数），这一判据有明确的
+        几何与物理依据：/clear 的清除半径为 20m，MEC 半径不超过该值
+        时，机器狗移动到 MEC 圆心即可保证清除。
 
         返回:
             confidence: 置信度 (0.0-1.0)
         """
-        if len(self.detection_points) != 2:
-            return 0.3
-
-        S1, theta1 = self.detection_points[0]
-        S2, theta2 = self.detection_points[1]
-
-        # 1. 直径评分（权重0.5）
-        # 直径<20米: 1.0
-        # 直径20-120米: 线性衰减
-        # 直径>120米: 0.2
-        if self.diameter <= 20:
-            diameter_score = 1.0
-        elif self.diameter <= 120:
-            diameter_score = 1.0 - (self.diameter - 20) / 100
-        else:
-            diameter_score = 0.2
-
-        # 2. 交会角评分（权重0.3）
-        from localization.point_selector import compute_intersection_angle
-        alpha = compute_intersection_angle(S1, theta1, S2, theta2)
-        angle_score = 1.0 - abs(alpha - 90) / 90
-
-        # 3. 基线评分（权重0.2）
-        baseline = np.linalg.norm(S2 - S1)
-        if 800 <= baseline <= 1000:
-            baseline_score = 1.0
-        elif baseline < 800:
-            baseline_score = baseline / 800
-        else:
-            baseline_score = min(1000 / baseline, 1.0)
-
-        confidence = (0.5 * diameter_score +
-                     0.3 * angle_score +
-                     0.2 * baseline_score)
-
-        return confidence
+        R = self.cover_radius
+        if R <= 20.0:
+            return 1.0
+        # 半径超过 20m 时按超出程度线性衰减，但保留非零下限
+        return max(0.3, 1.0 - (R - 20.0) / 100.0)
 
     def __repr__(self) -> str:
         """字符串表示"""
@@ -174,6 +148,7 @@ class Target:
             'channel_id': int(self.channel_id),
             'center': self.center.tolist(),
             'diameter': float(self.diameter),
+            'cover_radius': float(self.cover_radius),
             'confidence': float(self.confidence),
             'method': self.method,
             'cleared': self.cleared,
@@ -199,11 +174,12 @@ if __name__ == '__main__':
     from localization.region_calculator import compute_localization_region
 
     S1 = np.array([0.0, 0.0])
-    theta1 = 197.56
+    theta1 = 326.37
     S2 = np.array([900.0, 0.0])
-    theta2 = 229.45
+    theta2 = 264.09
 
-    region_info = compute_localization_region(S1, theta1, S2, theta2, error=1.0)
+    region_info = compute_localization_region(
+        np.array([S1, S2]), np.array([theta1, theta2]), error=1.0)
 
     target = Target(
         channel_id=1,

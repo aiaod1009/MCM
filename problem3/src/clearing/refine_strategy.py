@@ -132,8 +132,12 @@ def refine_and_retry(robot, target) -> bool:
         sample_points = target.hull[:min(3, len(target.hull))]
         print(f"      使用凸包顶点作为采样点（{len(sample_points)}个）")
     else:
-        # 如果没有凸包，在中心周围扩大采样
-        # 采样半径：直径的一半，但至少30米（确保覆盖范围）
+        # 如果没有凸包（单点估计），在中心周围扩大采样以补充测向。
+        # 单点估计的 diameter = 2 × 径向不确定度（R_avg=1250 与 1000/1500
+        # 的差 250m），故 diameter/2 恰为径向不确定度，用它作为采样散布
+        # 半径是语义自洽的（在不确定度范围内撒点，使采样点彼此拉开基线
+        # 以支持后续交会）。注意这不是"把直径当覆盖半径"——单点估计
+        # 本就没有凸包，采样半径只是补测向点的散布尺度。
         base_radius = target.diameter / 2
         radius = max(base_radius, 30.0)  # 至少30米
         angles = [0, 120, 240]  # 三个方向
@@ -160,28 +164,29 @@ def refine_and_retry(robot, target) -> bool:
         print(f"      ✗ 补充测向数据不足")
         return False
 
-    # 步骤3：重新定位
+    # 步骤3：重新定位 —— 全部新观测求交（与问题一 R=∩W_i 一致）
     try:
-        from localization.point_selector import select_detection_points
         from localization.region_calculator import compute_localization_region
 
         # 转换为阶段2的数据格式
         scan_data_refined = [[list(point), angle] for point, angle in new_measurements]
 
-        S1, theta1, S2, theta2, quality = select_detection_points(scan_data_refined)
+        all_detectors = np.array([d[0] for d in scan_data_refined], dtype=float)
+        all_azimuths = np.array([d[1] for d in scan_data_refined], dtype=float)
 
-        if S1 is None:
-            print(f"      ✗ 无法选择有效检测点对")
-            return False
-
-        # 重新计算定位区域
-        region_info_refined = compute_localization_region(S1, theta1, S2, theta2)
+        # 全部新观测求交
+        region_info_refined = compute_localization_region(
+            all_detectors, all_azimuths)
 
         new_center = region_info_refined['center']
         new_diameter = region_info_refined['diameter']
+        new_hull = region_info_refined['hull']
+        new_cover_radius = region_info_refined.get(
+            'cover_radius', new_diameter / 2.0)
 
         print(f"      精修后中心: ({new_center[0]:.1f}, {new_center[1]:.1f})")
         print(f"      精修后直径: {new_diameter:.1f} 米")
+        print(f"      精修后覆盖半径(最小覆盖圆): {new_cover_radius:.1f} 米")
 
     except Exception as e:
         print(f"      ✗ 精修定位失败: {e}")
@@ -195,19 +200,27 @@ def refine_and_retry(robot, target) -> bool:
         # 更新目标信息
         target.center = new_center
         target.diameter = new_diameter
+        target.hull = new_hull
+        target.cover_radius = new_cover_radius
         return True
     else:
         print(f"      ✗ 精修后仍未清除")
 
-        # 如果精修后区域仍然很大，不进行螺旋搜索
+        # 若精修后仍未清除，则按最小覆盖圆半径做螺旋搜索。
+        # 定位中心已是 MEC 圆心，MEC 半径 R_j 严格覆盖整个定位区域，
+        # 故螺旋搜索半径取 R_j（而非直径的一半），可保证不遗漏远角。
+        # 搜索半径仍受清除半径 20m 约束：R_j > 20m 时说明真实源尚未被
+        # 单点直清覆盖，需在更广范围内搜索。
         if new_diameter < 40:
-            # 尝试小范围螺旋搜索（限制在清除半径20米内）
             print(f"      → 启动螺旋搜索（精修后）")
-            # 更新target的center和diameter
+            # 更新 target 的 center / diameter / hull / cover_radius
             target.center = new_center
             target.diameter = new_diameter
-            # 搜索半径取直径的一半，但不超过20米（清除半径）
-            effective_radius = min(new_diameter / 2, 20.0)
+            target.hull = new_hull
+            target.cover_radius = new_cover_radius
+            # 螺旋搜索半径取最小覆盖圆半径（严格覆盖定位区域），
+            # 但不超过清除半径 20m 的搜索上限。
+            effective_radius = min(new_cover_radius, 20.0)
             return spiral_search(robot, target, search_radius=effective_radius, step=10)
         else:
             return False

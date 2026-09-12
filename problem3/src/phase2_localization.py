@@ -12,7 +12,6 @@ import os
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from localization.point_selector import select_detection_points
 from localization.region_calculator import compute_localization_region
 from localization.single_point_estimator import single_point_estimation
 from target import Target
@@ -46,7 +45,7 @@ def phase2_localization(
         1. 遍历所有活跃频道
         2. 对每个频道:
            - 数据点<2: 单点估计或跳过
-           - 数据点>=2: 选择最优检测点对，进行两点交会定位
+           - 数据点>=2: 全部有效观测求交（∩所有示向度扇形，与问题一一致）
         3. 按直径排序（小→大）
 
     输出示例:
@@ -72,18 +71,33 @@ def phase2_localization(
             print(f"频道 {channel_id}:")
 
         channel_scan_data = scan_data[str(channel_id)]
-        n_points = len(channel_scan_data)
+
+        # 过滤掉"距离过近"(near)使示向度为 None 的数据点：
+        # 这类点没有示向度，无法参与交会定位；若混入交会计算会触发
+        # TypeError 并中断整个流程，因此必须先剔除。
+        n_near = sum(1 for d in channel_scan_data if d[1] is None)
+        direction_data = [d for d in channel_scan_data if d[1] is not None]
+        n_points = len(direction_data)
 
         if verbose:
-            print(f"  数据点数量: {n_points}")
+            print(f"  数据点数量: {len(channel_scan_data)}"
+                  f"（含示向度 {n_points}，距离过近 {n_near}）")
+            if n_near > 0:
+                print(f"  ⚠️  已剔除 {n_near} 个\"距离过近\"点（无示向度，不参与交会）")
 
-        # 情况1：数据点不足（<2）
+        # 情况0：没有任何含示向度的数据点，跳过（留待阶段3兜底验证处理）
+        if n_points == 0:
+            if verbose:
+                print(f"  ✗  跳过：该频道无有效示向度数据（留待兜底验证处理）")
+            continue
+
+        # 情况1：含示向度的数据点不足（<2）
         if n_points < 2:
             if verbose:
-                print(f"  ⚠️  数据点不足，无法两点交会")
+                print(f"  ⚠️  示向度数据点不足，无法两点交会")
 
             if enable_single_point:
-                [[x1, y1], theta1] = channel_scan_data[0]
+                [[x1, y1], theta1] = direction_data[0]
                 S1 = np.array([x1, y1])
 
                 position, uncertainty = single_point_estimation(S1, theta1)
@@ -108,19 +122,47 @@ def phase2_localization(
                 if verbose:
                     print(f"  ✗  跳过（单点估计已禁用）")
 
-        # 情况2：数据点充足（>=2）
+        # 情况2：数据点充足（>=2）—— 全部有效观测求交（与问题一 R=∩W_i 一致）
         else:
-            S1, theta1, S2, theta2, quality = select_detection_points(channel_scan_data)
+            # 收集全部含示向度的检测点，作为扇形约束的完整集合。
+            # 不再只挑选"交会角最佳的两个点"：每多一个检测点即多一条
+            # 扇形约束，交集区域不增大，定位更紧、更可靠。
+            all_detectors = np.array([d[0] for d in direction_data], dtype=float)
+            all_azimuths = np.array([d[1] for d in direction_data], dtype=float)
 
-            if S1 is not None:
+            try:
+                region_info = compute_localization_region(
+                    all_detectors, all_azimuths)
+
+                target = Target(
+                    channel_id=channel_id,
+                    detection_points=[(np.array(d[0], dtype=float), d[1])
+                                      for d in direction_data],
+                    region_info=region_info,
+                    method='two_point'
+                )
+                targets.append(target)
+
                 if verbose:
-                    print(f"  ✓  检测点选择完成")
-                    print(f"      检测点1: ({S1[0]:.1f}, {S1[1]:.1f}), 示向度: {theta1:.2f}°")
-                    print(f"      检测点2: ({S2[0]:.1f}, {S2[1]:.1f}), 示向度: {theta2:.2f}°")
-                    print(f"      质量评分: {quality:.4f}")
+                    print(f"  ➜  多点交会定位成功（{len(direction_data)} 个观测全参与）")
+                    print(f"      定位中心: ({target.center[0]:.1f}, {target.center[1]:.1f})")
+                    print(f"      区域直径: {target.diameter:.2f} 米")
+                    print(f"      凸包顶点: {len(target.hull)}")
+                    print(f"      置信度: {target.confidence:.2f}")
 
+            except Exception as e:
+                if verbose:
+                    print(f"  ✗  多点交会定位失败: {e}")
+                    print(f"     → 回退为两点交会（取前两个有效观测）")
+                # 回退：全部观测求交失败（例如某观测与其余冲突导致空集）时，
+                # 仅用前两个观测做两点交会，保证流程不中断。
                 try:
-                    region_info = compute_localization_region(S1, theta1, S2, theta2)
+                    S1 = all_detectors[0]
+                    S2 = all_detectors[1]
+                    theta1 = float(all_azimuths[0])
+                    theta2 = float(all_azimuths[1])
+                    region_info = compute_localization_region(
+                        np.array([S1, S2]), np.array([theta1, theta2]))
 
                     target = Target(
                         channel_id=channel_id,
@@ -131,18 +173,13 @@ def phase2_localization(
                     targets.append(target)
 
                     if verbose:
-                        print(f"  ➜  两点交会定位成功")
+                        print(f"  ➜  两点回退定位成功")
                         print(f"      定位中心: ({target.center[0]:.1f}, {target.center[1]:.1f})")
                         print(f"      区域直径: {target.diameter:.2f} 米")
-                        print(f"      凸包顶点: {len(target.hull)}")
                         print(f"      置信度: {target.confidence:.2f}")
-
-                except Exception as e:
+                except Exception as e2:
                     if verbose:
-                        print(f"  ✗  定位失败: {e}")
-            else:
-                if verbose:
-                    print(f"  ✗  检测点选择失败")
+                        print(f"  ✗  两点回退也失败: {e2}")
 
         if verbose:
             print()
@@ -171,61 +208,37 @@ if __name__ == '__main__':
     print("测试 phase2_localization.py")
     print("=" * 60)
 
-    # 模拟阶段1的输出数据（基于2026-09-11的实测结果）
-    scan_result = {
-        'active_channels': [1, 2, 3, 4, 5, 7, 10, 20],
-        'scan_data': {
-            # 频道1: 5个数据点
-            '1': [
-                [[0.0, 0.0], 197.56],
-                [[900.0, 0.0], 229.45],
-                [[0.0, 900.0], 225.03],
-                [[-900.0, 0.0], 170.87],
-                [[0.0, -900.0], 169.55]
-            ],
-            # 频道2: 5个数据点
-            '2': [
-                [[0.0, 0.0], 210.12],
-                [[900.0, 0.0], 242.87],
-                [[0.0, 900.0], 238.45],
-                [[-900.0, 0.0], 184.32],
-                [[0.0, -900.0], 182.91]
-            ],
-            # 频道3: 3个数据点
-            '3': [
-                [[0.0, 0.0], 185.34],
-                [[900.0, 0.0], 217.89],
-                [[0.0, 900.0], 213.21]
-            ],
-            # 频道4: 2个数据点（最低）
-            '4': [
-                [[0.0, 0.0], 195.78],
-                [[900.0, 0.0], 228.34]
-            ],
-            # 频道5: 3个数据点
-            '5': [
-                [[0.0, 0.0], 205.45],
-                [[900.0, 0.0], 237.91],
-                [[0.0, 900.0], 233.12]
-            ],
-            # 频道7: 2个数据点（最低）
-            '7': [
-                [[0.0, 0.0], 192.34],
-                [[900.0, 0.0], 224.89]
-            ],
-            # 频道10: 1个数据点（无法交会）
-            '10': [
-                [[900.0, 0.0], 304.24]
-            ],
-            # 频道20: 4个数据点
-            '20': [
-                [[0.0, 0.0], 200.23],
-                [[900.0, 0.0], 232.78],
-                [[0.0, 900.0], 228.09],
-                [[-900.0, 0.0], 174.56]
-            ]
+    # 优先读取阶段1的真实扫描结果（results/phase1_scan_result.json）；
+    # 若不存在，则使用一组自洽的最小测试数据（各示向度确实指向同一批源）。
+    import os
+    import json
+
+    result_path = os.path.join(os.path.dirname(__file__), '..', 'results', 'phase1_scan_result.json')
+    if os.path.exists(result_path):
+        with open(result_path, 'r', encoding='utf-8') as f:
+            scan_result = json.load(f)
+        print(f"已加载真实扫描数据: {os.path.relpath(result_path)}\n")
+    else:
+        # 自洽的最小测试数据：源分别位于 (1000,200) 与 (-400,800) 附近，
+        # 各检测点示向度均由该源位置正演得到（误差在 ±1° 内）。
+        scan_result = {
+            'active_channels': [1, 2],
+            'scan_data': {
+                # 源1 ≈ (1000, 200)：检测点(0,0)、(900,0)、(0,900)
+                '1': [
+                    [[0.0, 0.0], 11.31],
+                    [[900.0, 0.0], 63.43],
+                    [[0.0, 900.0], 341.57]
+                ],
+                # 源2 ≈ (-400, 800)：检测点(0,0)、(-900,0)、(0,900)
+                '2': [
+                    [[0.0, 0.0], 116.57],
+                    [[-900.0, 0.0], 41.63],
+                    [[0.0, 900.0], 216.87]
+                ]
+            }
         }
-    }
+        print("未找到 results/phase1_scan_result.json，使用内置自洽测试数据\n")
 
     print("\n使用模拟数据测试阶段2主流程:\n")
 

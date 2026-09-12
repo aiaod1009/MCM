@@ -5,7 +5,7 @@
   src/main_problem3.py
     ├─ 阶段1  src/phase1_frequency_scan.py   FrequencyScan.run('hybrid')
     ├─ 阶段2  src/phase2_localization.py     两点交会 / 单点估计
-    └─ 阶段3  src/phase3_clearing.py         优先级贪心+2-opt → clear_target → final_verification_scan
+    └─ 阶段3  src/phase3_clearing.py         优先级贪心+真2-opt/Or-opt → clear_target → review_cleared
 
 输出：figures/fig_q3_flowchart.png（300dpi）与 .pdf（矢量）
 运行：python tools/fig_q3_flowchart.py
@@ -110,7 +110,7 @@ diamond(103, "进入成功？")
 side(103, "输出失败原因并退出程序", h=7.0)
 h_arrow(103, "否", from_x=X_MAIN + DIA_W / 2)
 
-box(88.5, "① 阶段1：9 个扫描点 × 20 个频道 全频扫描\n（圆心 C + 8 个环点，r = 900 m，间隔 45°）",
+box(88.5, "① 阶段1：9 个扫描点 × 20 个频道 全频扫描\n（圆心 C + 8 个环点，r = 1200 m，间隔 45°）",
     C_BLUE, F_BLUE, h=9.5)
 side(95.0, "POST /measure(position, channel)", h=7.0)
 side(84.0, "direction → 记录示向度 θ；near → 记为有源\nno_signal → 忽略（超距或该频道无源）", h=10.0)
@@ -125,14 +125,14 @@ side(61.5, "数据点 < 2：单点估计（直径 = 2 × 不确定度）")
 box(54.5, "得到各源定位中心与区域直径\n按直径升序排序 → 目标列表 targets",
     C_GREEN, F_GREEN, h=9.5)
 
-box(43.5, "③ 阶段3：优先级贪心 + 2-opt 规划清除路径", C_ORANGE, F_ORANGE, h=7.5)
-side(43.5, "按直径分 3 个优先级组，组内最近邻 + 2-opt")
+box(43.5, "③ 阶段3：优先级贪心 + 2-opt / Or-opt 规划清除路径", C_ORANGE, F_ORANGE, h=7.5)
+side(43.5, "按直径分 3 个优先级组作为初始解，\n再边反转 2-opt + 单点重定位 Or-opt")
 
 box(32.5, "逐个目标 POST /clear（最多 3 次尝试）", C_ORANGE, F_ORANGE, h=7.5)
 side(32.5, "失败 → 精修：区域边界补测 → 重新定位 → 20 m 螺旋搜索")
 
-box(21.5, "兜底验证：5 点全频扫描（原点 + 4 个方向）", C_ORANGE, F_ORANGE, h=7.5)
-side(21.5, "发现遗漏 → 重新交会定位并补救清除")
+box(21.5, "清除复核（零检测）\n/clear 返回 success 即已清除", C_ORANGE, F_ORANGE, h=9.5)
+side(21.5, "未确认清除的频道 → 用阶段1测向数据交会/单点/near 点直清\n仍失败则围绕估计中心做 40 m 螺旋搜索")
 
 box(10.5, "统计输出：清除比例、平均定位清除时间", C_ORANGE, F_ORANGE, h=7.5)
 
@@ -147,8 +147,8 @@ v_arrow(72.75, 69.25)     # 汇总 → 阶段2
 v_arrow(61.75, 59.25)     # 阶段2 → 排序
 v_arrow(49.75, 47.25)     # 排序 → 阶段3规划
 v_arrow(39.75, 36.25)     # 规划 → 清除
-v_arrow(28.75, 25.25)     # 清除 → 验证
-v_arrow(17.75, 14.25)     # 验证 → 统计
+v_arrow(28.75, 26.25)     # 清除 → 复核
+v_arrow(16.75, 14.25)     # 复核 → 统计
 v_arrow(6.75, 3.25)       # 统计 → 退出
 
 # ---------------- 保存 ----------------

@@ -41,7 +41,8 @@ class TeeLogger:
         self.log.close()
 
 
-def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
+def main(robot_id: str, save_results: bool = True, log_to_file: bool = True,
+         case_code: str = None):
     """
     问题3主程序
 
@@ -49,12 +50,19 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
         robot_id: 参赛队号
         save_results: 是否保存结果
         log_to_file: 是否保存日志到文件
+        case_code: 测试案例编码（模拟器测试页面显示，用于表1填写与日志关联）
 
     返回:
         results: 完整结果字典
     """
     # 设置日志
     logger = None
+    log_file = None
+    robot = None
+    final_results = None
+    run_summary = {}
+    results_dir_path = os.path.join(os.path.dirname(__file__), '..', 'results')
+
     if log_to_file:
         # 创建test_logs目录
         log_dir = os.path.join(os.path.dirname(__file__), '..', 'test_logs')
@@ -70,7 +78,7 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
         logger = TeeLogger(log_file)
         sys.stdout = logger
 
-        print(f"日志保存路径: test_logs/test_log_{timestamp}.txt")
+        print(f"日志保存路径: {os.path.relpath(log_file, os.path.join(os.path.dirname(__file__), '..'))}")
         print()
 
     try:
@@ -78,12 +86,15 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
         print("问题3：自动搜索定位并清除全向干扰源")
         print("="*60)
         print(f"参赛队号: {robot_id}")
+        if case_code:
+            print(f"测试案例编码: {case_code}")
         print(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("="*60 + "\n")
 
         # 创建机器狗客户端
         print("连接模拟器...")
-        robot = SimulatorClient(base_url="http://127.0.0.1:2026", robot_id=robot_id)
+        robot = SimulatorClient(base_url="http://127.0.0.1:2026", robot_id=robot_id,
+                                case_code=case_code)
 
         # 进入目标区域
         print("正在进入目标区域...")
@@ -194,7 +205,9 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
                 'clear_times': {},
                 'total_time': 0,
                 'clearing_ratio': 0,
-                'average_clear_time': 0
+                'average_clear_time': 0,
+                'reviewed_channels': [],
+                'recovered_channels': [],
             }
         else:
             print("\n" + "█"*60)
@@ -206,7 +219,9 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
             phase3_result = phase3_patrol_and_clear(
                 targets,
                 robot,
-                enable_2opt=True  # 启用2-opt路径优化，减少移动时间
+                enable_2opt=True,  # 启用路径优化（2-opt + Or-opt），压缩巡游移动时间
+                active_channels=phase1_result['active_channels'],
+                scan_data=phase1_result['scan_data'],
             )
 
             print(f"\n阶段3完成：")
@@ -222,14 +237,24 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
         print("="*60)
 
         total_virtual_time = robot.virtual_time  # 直接访问属性
+        cleared_count = len(phase3_result['cleared'])
+        failed_count = len(phase3_result['failed'])
+        found_count = len(targets)
+
+        # 竞赛口径：平均定位清除时间 = 本次测试总虚拟时间 ÷ 清除干扰源个数
+        # （涵盖搜索、定位、清除、复核全过程的平均耗时）
+        avg_locate_clear_time = (total_virtual_time / cleared_count) if cleared_count else 0.0
+
         print(f"\n总虚拟时间: {total_virtual_time:.1f} 秒 ({total_virtual_time/60:.1f} 分钟)")
         print(f"清除比例: {phase3_result['clearing_ratio']*100:.1f}%")
-        print(f"成功清除: {len(phase3_result['cleared'])}/{len(targets)}")
-        print(f"清除失败: {len(phase3_result['failed'])}")
+        print(f"成功清除: {cleared_count}/{found_count}")
+        print(f"清除失败: {failed_count}")
+        print(f"平均定位清除时间: {avg_locate_clear_time:.1f} 秒/个")
 
-        # 汇总结果
+        # 汇总结果（program_runtime 需等 /exit 才能确定，稍后回填）
         final_results = {
             'robot_id': robot_id,
+            'case_code': case_code,
             'timestamp': datetime.now().isoformat(),
             'phase1': {
                 'active_channels': phase1_result['active_channels'],
@@ -240,8 +265,8 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
                 'targets': [t.to_dict() for t in targets]
             },
             'phase3': {
-                'cleared_count': len(phase3_result['cleared']),
-                'failed_count': len(phase3_result['failed']),
+                'cleared_count': cleared_count,
+                'failed_count': failed_count,
                 'clearing_ratio': phase3_result['clearing_ratio'],
                 'average_clear_time': phase3_result['average_clear_time'],
                 'total_time': phase3_result['total_time']
@@ -249,8 +274,20 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
             'summary': {
                 'total_virtual_time': total_virtual_time,
                 'clearing_ratio': phase3_result['clearing_ratio'],
+                'cleared_count': cleared_count,
+                'average_locate_clear_time': avg_locate_clear_time,
+                'program_runtime_s': None,
                 'success': phase3_result['clearing_ratio'] >= 1.0
             }
+        }
+
+        run_summary = {
+            'total_virtual_time': total_virtual_time,
+            'cleared_count': cleared_count,
+            'found_count': found_count,
+            'failed_count': failed_count,
+            'clearing_ratio': phase3_result['clearing_ratio'],
+            'average_locate_clear_time': avg_locate_clear_time,
         }
 
         if save_results:
@@ -260,8 +297,13 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
 
             result_file = os.path.join(results_dir, 'final_results.json')
             with open(result_file, 'w') as f:
-                json.dump(final_results, f, indent=2)
+                json.dump(final_results, f, indent=2, ensure_ascii=False)
                 print(f"\n最终结果已保存到: results/final_results.json")
+
+        # ----------------------------------------------------------------
+        # 收尾（表1 口径汇总、行为日志落盘）在 finally 中完成：
+        # 程序运行时间要等 /exit 才能确定，故统一放到 /exit 之后输出。
+        # ----------------------------------------------------------------
 
         # ================================================================
         # 完成
@@ -291,15 +333,52 @@ def main(robot_id: str, save_results: bool = True, log_to_file: bool = True):
         return None
 
     finally:
-        # 清理
+        # 清理：主动调用 /exit 结束测试（/exit 之后才能确定程序运行时间）
         print(f"\n清理资源...")
-        robot.exit()
+        if robot is not None:
+            robot.exit()
+
+        # ----------------------------------------------------------------
+        # 表1 口径汇总 + 行为日志落盘
+        # （程序运行时间、/exit 响应都要等 /exit 之后才有，故统一放在 finally）
+        # ----------------------------------------------------------------
+        try:
+            program_runtime = robot.program_runtime if robot is not None else None
+
+            if run_summary:
+                print("\n" + "="*60)
+                print("表1 问题3 测试结果（本次测试，可直接抄录）")
+                print("="*60)
+                print(f"  测试案例编码    : "
+                      f"{case_code if case_code else '（未提供，请从模拟器测试页面抄录）'}")
+                print(f"  清除干扰源个数  : {run_summary['cleared_count']}")
+                print(f"  平均定位清除时间: {run_summary['average_locate_clear_time']:.1f} 秒")
+                if program_runtime is not None:
+                    print(f"  程序运行时间    : {program_runtime:.1f} 秒 "
+                          f"({program_runtime/60:.2f} 分钟)")
+                else:
+                    print(f"  程序运行时间    : （未记录）")
+                print("="*60)
+
+            if robot is not None and save_results and os.path.exists(results_dir_path):
+                stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                robot.save_log(os.path.join(results_dir_path, f'action_log_{stamp}.json'))
+                robot.export_action_table(os.path.join(results_dir_path, f'action_table_{stamp}.csv'))
+
+                # 回填程序运行时间并重写 final_results.json
+                if final_results is not None:
+                    final_results['summary']['program_runtime_s'] = program_runtime
+                    with open(os.path.join(results_dir_path, 'final_results.json'), 'w') as f:
+                        json.dump(final_results, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️  收尾记录失败: {e}")
 
         # 恢复stdout并关闭日志文件
         if logger:
             sys.stdout = logger.terminal
             logger.close()
-            print(f"\n日志已保存到: test_logs/test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+            if log_file:
+                print(f"\n日志已保存到: {log_file}")
 
 
 if __name__ == '__main__':
@@ -307,6 +386,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='问题3：自动搜索定位并清除全向干扰源')
     parser.add_argument('robot_id', type=str, nargs='?', help='参赛队号')
+    parser.add_argument('--case-code', type=str, default=None,
+                        help='测试案例编码（模拟器测试页面显示，用于表1填写与日志关联）')
     parser.add_argument('--no-save', action='store_true', help='不保存结果')
     parser.add_argument('--no-log', action='store_true', help='不保存日志到文件')
 
@@ -323,4 +404,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # 运行主程序
-    main(robot_id, save_results=not args.no_save, log_to_file=not args.no_log)
+    main(robot_id,
+         save_results=not args.no_save,
+         log_to_file=not args.no_log,
+         case_code=args.case_code)

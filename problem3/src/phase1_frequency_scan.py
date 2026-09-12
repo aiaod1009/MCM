@@ -7,6 +7,26 @@ from typing import List, Dict, Tuple, Set
 import time
 
 
+# ======================================================================
+# 扫描布局参数
+# ======================================================================
+# 目标区域为半径 1800 m 的圆域；每个干扰源的有效接收半径各自在 1000~1500 m。
+# "确保探测"要求：圆域内任意一点到"最近一个扫描点"的距离 ≤ 1000 m
+# （取源的最小有效接收半径作为最坏情况阈值）。
+# 数值扫描（圆心 + 8 个环点，细网格采样整个圆域）：
+#   r = 900  → 最远点距 1027.9 m  ✗ 不保证（存在扫不到的边角）
+#   r = 1000 → 最远点距  956   m  △ 临界，余量仅 44 m
+#   r = 1100 → 最远点距  890   m  ✓
+#   r = 1200 → 最远点距  830   m  ✓ 余量 170 m（本程序采用）
+# 代价：环点半径增大 → 阶段1移动距离增大 → 虚拟时间增加约 380 s。
+SCAN_RING_RADIUS = 1200.0   # 扫描环半径（米）
+SCAN_RING_POINTS = 8        # 环上扫描点数
+# 做"全频道扫描"的扫描点个数；None 表示所有扫描点都全频道扫描（默认，确保不漏检）。
+# 设为小于 9 的值可减少检测次数、缩短阶段1时间，但会牺牲探测完备性保证。
+FULL_SCAN_POINTS = None
+# ======================================================================
+
+
 class ScanResult:
     """扫描结果数据类"""
 
@@ -32,13 +52,13 @@ class FrequencyScan:
         self.client = simulator_client
         self.total_channels = 20  # 频道总数
 
-    def generate_scan_points(self, r: float = 900, k: int = 8, add_outer_ring: bool = False, r_outer: float = 1400, k_outer: int = 4) -> List[np.ndarray]:
+    def generate_scan_points(self, r: float = SCAN_RING_RADIUS, k: int = SCAN_RING_POINTS, add_outer_ring: bool = False, r_outer: float = 1400, k_outer: int = 4) -> List[np.ndarray]:
         """
         生成扫描点坐标
 
         Args:
-            r: 内圈半径（米），建议900-1000米
-            k: 内圈点数，建议8个以上以覆盖定向干扰源
+            r: 内圈半径（米），默认 1200（见模块顶部 SCAN_RING_RADIUS 的覆盖性论证）
+            k: 内圈点数，默认 8（45° 间隔，配合 r=1200 可保证圆域全域覆盖）
             add_outer_ring: 是否添加外圈扫描点
             r_outer: 外圈半径（米），建议1400米
             k_outer: 外圈点数，建议4个（覆盖4个角的方向）
@@ -69,17 +89,24 @@ class FrequencyScan:
 
     def hybrid_scan(self, scan_points: List[np.ndarray]) -> ScanResult:
         """
-        混合扫描策略（推荐）- 优化版
+        混合扫描策略（推荐）
 
         策略：
-        1. 圆心C：扫描全部20个频道
-        2. 前3个环点：扫描全部20个频道（多方向覆盖定向干扰源）
-        3. 其余环点：只扫描有源频道
+        1. 每个扫描点都扫描全部 20 个频道（发现新源 + 为已发现源积累测向数据）
 
-        关键优化：
-        - 增加全频道扫描点数量（至少4个点：圆心+3个环点）
-        - 覆盖更多方向以发现定向干扰源（定向覆盖角120°）
-        - 8个环点 × 360° / 8 = 45°间隔，确保无盲区
+        为什么不是"前几个点全扫、其余点只扫有源频道"：
+        ---------------------------------------------------------------
+        一个源只有在"机器狗距它 ≤ 其有效接收半径"时才能被检测到。若只在
+        前 m 个扫描点上做全频道扫描，则位于第 m+1..k 个扫描点附近（而离前
+        m 个点都超过 1000 m）的源会被漏掉。以 r=1200、8 环点为例：环点
+        E5=(-1200,0) 处的源到 E1=(1200,0) 的距离为 2400 m > 1000 m，
+        若 E5 不做全频道扫描就会整片漏检。
+        因此，只有在【每个扫描点】都做全频道扫描时，"全域任一点距最近扫描
+        点 ≤ 1000 m"这一覆盖性保证（见 SCAN_RING_RADIUS 注释）才能转化为
+        "任一源至少被检测到一次"的保证。
+        ---------------------------------------------------------------
+        代价：9 点 × 20 频道 = 180 次检测（虚拟时间 180×6 = 1080 s），
+        这是阶段1的主要开销，属"确保不漏检"的必要成本。
 
         Args:
             scan_points: 扫描点列表 [C, E1, E2, ..., Ek]
@@ -88,7 +115,7 @@ class FrequencyScan:
             ScanResult: 扫描结果
         """
         print("\n" + "="*60)
-        print("阶段1：枚举频道扫描（混合策略 - 优化版）")
+        print("阶段1：枚举频道扫描（混合策略）")
         print("="*60)
 
         result = ScanResult()
@@ -97,15 +124,10 @@ class FrequencyScan:
 
         start_time = time.time()
 
-        # 前N个点全频道扫描（包括圆心）
-        # 优化：为确保检测率，所有扫描点都全频道扫描
+        # 全频道扫描点数：默认全部扫描点（确保发现全部有源频道，见上方论证）
         total_points = len(scan_points)
-        if total_points <= 5:
-            # 点数少，全部全扫描
-            full_scan_count = total_points
-        else:
-            # 点数多时，仍然全部全扫描以确保100%检测率
-            full_scan_count = total_points
+        full_scan_count = FULL_SCAN_POINTS if FULL_SCAN_POINTS is not None else total_points
+        full_scan_count = min(full_scan_count, total_points)
 
         # ===== 阶段1：多点全频道扫描 =====
         print(f"\n[阶段1.1] 多方向全频道扫描（前{full_scan_count}个点）")
@@ -232,7 +254,12 @@ class FrequencyScan:
 
         优点：
         - 速度快：只需3个全扫描点
-        - 配合阶段三兜底验证，总体时间更优
+        - 仅适用于快速试跑
+
+        警告：
+        - 只在 3 个点做全扫，放弃"不漏检"保证；阶段3的清除复核
+          （review_cleared）以"阶段1不漏检"为前提，故正式测试必须用
+          strategy='hybrid'。本策略保留仅作速度对比。
 
         Args:
             scan_points: 扫描点列表 [C, E1, E2, ..., Ek]
@@ -407,29 +434,34 @@ class FrequencyScan:
 
         return result
 
-    def run(self, strategy: str = 'smart') -> ScanResult:
+    def run(self, strategy: str = 'hybrid') -> ScanResult:
         """
         执行阶段1扫描
 
         Args:
             strategy: 扫描策略
-                - 'smart': 智能快速策略（推荐，3点全扫+兜底验证）
-                - 'hybrid': 混合策略（4点全扫，覆盖更好）
-                - 'naive': 全点全扫（最慢，100%覆盖）
+                - 'hybrid': 混合策略（默认，推荐）——圆心 + 8 个环点，
+                  9 个点全部做 20 频道全扫。此时"圆域内任一点距最近扫描点
+                  ≤ 830 m ≤ 1000 m"才成立，阶段1才能保证不漏检任何全向源。
+                - 'naive': 全点全扫（与 hybrid 同为完备扫描，仅打印/统计口径更啰嗦）
+                - 'smart': 快速策略（仅前 3 个点做全扫）——检测次数更少，
+                  但**放弃"不漏检"的保证**，只应用于快速试跑；
+                  阶段3的记账复核（review_cleared）以"阶段1不漏检"为前提，
+                  故正式测试必须使用 hybrid。
 
         Returns:
             ScanResult: 扫描结果
         """
-        # 生成扫描点
+        # 生成扫描点（r=1200 满足"圆域内任一点距最近扫描点 ≤1000m"的探测保证）
         if strategy == 'smart':
-            # 快速策略：少点+兜底
-            scan_points = self.generate_scan_points(r=900, k=8)
+            # 快速策略：只有前 3 个点做全扫 → 不保证不漏检，仅用于快速试跑
+            scan_points = self.generate_scan_points(r=SCAN_RING_RADIUS, k=SCAN_RING_POINTS)
         elif strategy == 'hybrid':
-            # 混合策略：9个点全扫（检测率97%+，时间最优）
-            scan_points = self.generate_scan_points(r=900, k=8)
+            # 混合策略：圆心+8环点，9个点全频道扫描（确保发现全部有源频道）
+            scan_points = self.generate_scan_points(r=SCAN_RING_RADIUS, k=SCAN_RING_POINTS)
         else:
-            # 朴素策略：保守全扫（8个环点）
-            scan_points = self.generate_scan_points(r=900, k=8)
+            # 朴素策略：保守全扫
+            scan_points = self.generate_scan_points(r=SCAN_RING_RADIUS, k=SCAN_RING_POINTS)
 
         print(f"\n扫描点布局:")
         print(f"  圆心C:  ({scan_points[0][0]:.1f}, {scan_points[0][1]:.1f})")

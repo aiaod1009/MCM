@@ -41,6 +41,10 @@ def select_detection_points(
         >>> S1, theta1, S2, theta2, quality = select_detection_points(scan_data)
         >>> print(f"最优组合: {S1}, {S2}, 质量: {quality:.2f}")
     """
+    # 防御性过滤：剔除示向度为 None（来自"距离过近"测量）的数据点，
+    # 它们没有方位信息，不能参与交会计算。
+    scan_data_channel = [d for d in scan_data_channel if d[1] is not None]
+
     n = len(scan_data_channel)
 
     # 情况1：只有1个数据点，无法交会

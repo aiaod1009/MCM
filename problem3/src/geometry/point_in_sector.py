@@ -12,7 +12,8 @@ def point_in_sector(
     P: np.ndarray,
     detector: np.ndarray,
     azimuth: float,
-    error: float
+    error: float,
+    tol: float = 1e-9
 ) -> bool:
     """
     判断点是否在单个检测点的扇形区域内
@@ -22,6 +23,7 @@ def point_in_sector(
         detector: 检测点坐标 [x, y]
         azimuth: 示向度（度）
         error: 误差范围（度）
+        tol: 角度容差（度），默认 1e-9。用于消除浮点误差对边界点的影响。
 
     返回:
         is_inside: 布尔值，True表示点在扇形内，False表示不在
@@ -30,6 +32,13 @@ def point_in_sector(
         1. 计算从检测点到P的方位角
         2. 判断该角度是否在 [azimuth-error, azimuth+error] 范围内
         3. 需要特别处理跨越0度的情况
+
+    注意（数值鲁棒性）:
+        定位区域的顶点都是"边界射线之间的交点"，因此它们在数学上恰好
+        落在扇区边界上。浮点运算会使这些点的实测方位角比边界大/小约
+        1e-13 度，若用严格比较（< / >）会随机地把边界顶点误判为"在扇区外"，
+        导致凸包缺角甚至退化成单点。故所有边界比较都必须带角度容差 tol。
+        （与问题一 MATLAB 实现中的角度容差 τ 保持一致）
     """
     # 计算从检测点到P的向量
     vec = P - detector
@@ -44,16 +53,16 @@ def point_in_sector(
     theta_min = (azimuth - error) % 360
     theta_max = (azimuth + error) % 360
 
-    # 判断是否在扇形内（需要处理跨越0度的情况）
+    # 判断是否在扇形内（需要处理跨越0度的情况），带角度容差
     if theta_min <= theta_max:
         # 正常情况：扇形不跨越0度
         # 例如：扇形范围 [44, 46]，点的角度应该在此范围内
-        if angle_to_P < theta_min or angle_to_P > theta_max:
+        if angle_to_P < theta_min - tol or angle_to_P > theta_max + tol:
             return False
     else:
         # 跨越0度的情况：扇形范围如 [359, 1]
         # 点的角度应该 >= 359 或 <= 1
-        if angle_to_P < theta_min and angle_to_P > theta_max:
+        if angle_to_P < theta_min - tol and angle_to_P > theta_max + tol:
             return False
 
     return True
@@ -63,7 +72,8 @@ def point_in_sectors(
     P: np.ndarray,
     detectors: np.ndarray,
     azimuths: np.ndarray,
-    error: float
+    error: float,
+    tol: float = 1e-9
 ) -> bool:
     """
     判断点是否在所有检测点的扇形区域内
@@ -73,6 +83,7 @@ def point_in_sectors(
         detectors: 检测点坐标矩阵 n×2
         azimuths: 示向度向量 n×1（度）
         error: 误差范围（度）
+        tol: 角度容差（度），默认 1e-9（见 point_in_sector 说明）
 
     返回:
         is_inside: 布尔值，True表示点在所有扇形内，False表示至少有一个不在
@@ -88,7 +99,7 @@ def point_in_sectors(
     n = len(detectors)
 
     for i in range(n):
-        if not point_in_sector(P, detectors[i], azimuths[i], error):
+        if not point_in_sector(P, detectors[i], azimuths[i], error, tol):
             return False
 
     return True
