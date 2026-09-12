@@ -93,7 +93,7 @@ for r = 1:n_row
     for k = 1:size(hull, 1)
         dmax = max(dmax, norm(hull(k, :) - C));
     end
-    cover = double(dmax <= R + 1e-6);
+    cover = double(dmax <= R + 1e-9 * max(1, D));
 
     fprintf(fid, '%d,%d,%.10f,%.10f,%.10f,%d\n', ...
             cid, size(hull, 1), D, R, dmax, cover);

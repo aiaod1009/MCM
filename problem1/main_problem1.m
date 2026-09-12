@@ -170,8 +170,8 @@ if size(hull, 1) > 0
             worst_vertex_id, hull(worst_vertex_id,1), hull(worst_vertex_id,2));
 end
 
-% 判断覆盖性（使用小容差考虑数值误差）
-tolerance = 1e-6;
+% 判断覆盖性（使用尺度相关的小容差考虑数值误差，ε_num = 1e-9*max(1,D)）
+tolerance = 1e-9 * max(1, D);
 if max_dist <= circle_radius + tolerance
     fprintf('\n结论: 以直径为直径的圆 能够完全覆盖定位区域 ✓\n');
     can_cover = true;

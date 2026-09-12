@@ -133,7 +133,7 @@ for idx = 1:total_cases
         fprintf('圆半径: %.4f 米\n', circle_radius);
         fprintf('最大距离: %.4f 米\n', max_dist);
 
-        tolerance = 1e-6;
+        tolerance = 1e-9 * max(1, D);
         if max_dist <= circle_radius + tolerance
             fprintf('结论: 能够覆盖 ✓\n');
             can_cover = true;
