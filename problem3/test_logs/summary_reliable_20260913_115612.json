@@ -1,0 +1,54 @@
+{
+  "algorithm_version": "problem3-reliable-v1",
+  "scan_points": 9,
+  "scanned_points": 9,
+  "discovered_channels": [
+    2,
+    4,
+    6,
+    8,
+    10,
+    11,
+    15,
+    18,
+    19,
+    20
+  ],
+  "cleared_channels": [
+    2,
+    4,
+    6,
+    8,
+    10,
+    11,
+    15,
+    18,
+    19,
+    20
+  ],
+  "unresolved_channels": [],
+  "completed": true,
+  "coverage_complete": true,
+  "completion_reason": "全部覆盖点完成且所有已发现频道清除成功",
+  "total_virtual_time_s": 4327.631729,
+  "average_location_clear_time_s": 432.7631729,
+  "actual_total": null,
+  "official_clearance_ratio": null,
+  "actions": {
+    "measures": 184,
+    "clear_attempts": 10,
+    "clear_successes": 10,
+    "moves": 22,
+    "switches": 183
+  },
+  "phase_times": {
+    "scan_s": 2604.816336,
+    "clear_s": 1722.8153929999999
+  },
+  "fallback_calls": 0,
+  "fallback_points_pruned": 0,
+  "max_local_numeric_gap_m": 0.006390588665908581,
+  "error": null,
+  "exit_error": null,
+  "program_runtime_s": 0.23770010005682707
+}

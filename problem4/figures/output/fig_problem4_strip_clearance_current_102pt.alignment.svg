@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="518.4pt" height="212.4pt" viewBox="0 0 518.4 212.4">
+<rect width="100%" height="100%" fill="white"/>
+<rect x="38.880" y="29.736" width="283.993" height="146.556" fill="none" stroke="#2c7bb6" stroke-width="1.2"/>
+<text x="40.880" y="39.736" font-family="Arial, sans-serif" font-size="8" fill="#2c7bb6">main</text>
+<rect x="384.405" y="29.736" width="126.219" height="146.556" fill="none" stroke="#2c7bb6" stroke-width="1.2"/>
+<text x="386.405" y="39.736" font-family="Arial, sans-serif" font-size="8" fill="#2c7bb6">inset</text>
+<text x="4" y="207.400" font-family="Arial, sans-serif" font-size="7" fill="#333">PASS: 0 fail, 0 warn</text>
+</svg>

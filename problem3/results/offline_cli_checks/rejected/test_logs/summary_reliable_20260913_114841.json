@@ -1,0 +1,29 @@
+{
+  "algorithm_version": "problem3-reliable-v1",
+  "scan_points": 9,
+  "scanned_points": 0,
+  "discovered_channels": [],
+  "cleared_channels": [],
+  "unresolved_channels": [],
+  "completed": false,
+  "coverage_complete": false,
+  "completion_reason": "未完成",
+  "total_virtual_time_s": 0.0,
+  "average_location_clear_time_s": null,
+  "actual_total": null,
+  "official_clearance_ratio": null,
+  "actions": {
+    "measures": 0,
+    "clear_attempts": 0,
+    "clear_successes": 0,
+    "switches": 0,
+    "moves": 0
+  },
+  "phase_times": {},
+  "fallback_calls": 0,
+  "fallback_points_pruned": 0,
+  "max_local_numeric_gap_m": 0.0,
+  "error": "synthetic measure rejection",
+  "exit_error": null,
+  "program_runtime_s": 0.00022410019300878048
+}

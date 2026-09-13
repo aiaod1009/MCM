@@ -1,0 +1,329 @@
+{
+  "robot_id": "202619020062",
+  "timestamp": "2026-09-12T23:08:04.027579",
+  "phase1": {
+    "active_channels": [
+      1,
+      3,
+      5,
+      7,
+      11,
+      19,
+      6,
+      8,
+      10,
+      15,
+      2,
+      13,
+      20
+    ],
+    "total_channels": 13,
+    "supplementary_channels": [
+      2,
+      13,
+      20
+    ]
+  },
+  "phase2": {
+    "targets_count": 13,
+    "targets": [
+      {
+        "channel_id": 1,
+        "center": [
+          -4871.479061258333,
+          -635.3007406629524
+        ],
+        "diameter": 14976.10083243868,
+        "confidence": 7.59141781802828e-131,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 3,
+        "center": [
+          1549.3770015500932,
+          -1837.9202122870342
+        ],
+        "diameter": 7287.783351575235,
+        "confidence": 5.0017053291491885e-64,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 5,
+        "center": [
+          -116.54131543472306,
+          -1377.7140483732467
+        ],
+        "diameter": 12.178505793163646,
+        "confidence": 2.6345624739527105e-05,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 7,
+        "center": [
+          -143.0799463874306,
+          -651.2831068251998
+        ],
+        "diameter": 255.39138998406005,
+        "confidence": 0.0060492087556576635,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 11,
+        "center": [
+          168.80790013863378,
+          -978.23395966264
+        ],
+        "diameter": 40.983457091308914,
+        "confidence": 1.7994723903957273e-10,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 19,
+        "center": [
+          543.454611960786,
+          270.57093602787967
+        ],
+        "diameter": 10.726157206225027,
+        "confidence": 8.248119209933385e-05,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 6,
+        "center": [
+          843.3384454512932,
+          1037.47875641782
+        ],
+        "diameter": 176.4660287142759,
+        "confidence": 0.029324833145831054,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 8,
+        "center": [
+          1491.157825550704,
+          824.924861759518
+        ],
+        "diameter": 14.518860257754712,
+        "confidence": 4.02656255334405e-05,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 10,
+        "center": [
+          1306.7574028513095,
+          1014.4350531750381
+        ],
+        "diameter": 54.64096267758302,
+        "confidence": 1.301860801214799e-15,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 15,
+        "center": [
+          359.07231843074675,
+          1399.1507778790967
+        ],
+        "diameter": 160.90641239599185,
+        "confidence": 0.04002991425814627,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 2,
+        "center": [
+          -1883.8989279139887,
+          -457.36995199492355
+        ],
+        "diameter": 2498.902702169773,
+        "confidence": 1.971545991960519e-22,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 13,
+        "center": [
+          -611.4244990542968,
+          -1046.4606722590415
+        ],
+        "diameter": 3455.2229614689522,
+        "confidence": 9.734523138929546e-31,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      },
+      {
+        "channel_id": 20,
+        "center": [
+          390.56750738886467,
+          -816.620541459409
+        ],
+        "diameter": 0.0,
+        "confidence": 4.9427867875702895e-06,
+        "source_type": "unknown",
+        "classification_confidence": 1.0,
+        "method": "wedge"
+      }
+    ]
+  },
+  "phase3": {
+    "cleared": [
+      {
+        "channel_id": 19,
+        "center": [
+          543.454611960786,
+          270.57093602787967
+        ],
+        "diameter": 10.726157206225027,
+        "confidence": 8.248119209933385e-05
+      },
+      {
+        "channel_id": 10,
+        "center": [
+          1306.7574028513095,
+          1014.4350531750381
+        ],
+        "diameter": 54.64096267758302,
+        "confidence": 1.301860801214799e-15
+      },
+      {
+        "channel_id": 20,
+        "center": [
+          390.56750738886467,
+          -816.620541459409
+        ],
+        "diameter": 0.0,
+        "confidence": 4.9427867875702895e-06
+      },
+      {
+        "channel_id": 11,
+        "center": [
+          168.80790013863378,
+          -978.23395966264
+        ],
+        "diameter": 40.983457091308914,
+        "confidence": 1.7994723903957273e-10
+      },
+      {
+        "channel_id": 6,
+        "center": [
+          843.3384454512932,
+          1037.47875641782
+        ],
+        "diameter": 176.4660287142759,
+        "confidence": 0.029324833145831054
+      },
+      {
+        "channel_id": 5,
+        "center": [
+          -116.54131543472306,
+          -1377.7140483732467
+        ],
+        "diameter": 12.178505793163646,
+        "confidence": 2.6345624739527105e-05
+      },
+      {
+        "channel_id": 15,
+        "center": [
+          359.07231843074675,
+          1399.1507778790967
+        ],
+        "diameter": 160.90641239599185,
+        "confidence": 0.04002991425814627
+      },
+      {
+        "channel_id": 8,
+        "center": [
+          1491.157825550704,
+          824.924861759518
+        ],
+        "diameter": 14.518860257754712,
+        "confidence": 4.02656255334405e-05
+      },
+      {
+        "channel_id": 1,
+        "center": [
+          -4871.479061258333,
+          -635.3007406629524
+        ],
+        "diameter": 14976.10083243868,
+        "confidence": 7.59141781802828e-131
+      },
+      {
+        "channel_id": 3,
+        "center": [
+          1549.3770015500932,
+          -1837.9202122870342
+        ],
+        "diameter": 7287.783351575235,
+        "confidence": 5.0017053291491885e-64
+      },
+      {
+        "channel_id": 7,
+        "center": [
+          -143.0799463874306,
+          -651.2831068251998
+        ],
+        "diameter": 255.39138998406005,
+        "confidence": 0.0060492087556576635
+      }
+    ],
+    "failed": [
+      {
+        "channel_id": 13,
+        "center": [
+          -611.4244990542968,
+          -1046.4606722590415
+        ],
+        "diameter": 3455.2229614689522,
+        "confidence": 9.734523138929546e-31
+      },
+      {
+        "channel_id": 2,
+        "center": [
+          -1883.8989279139887,
+          -457.36995199492355
+        ],
+        "diameter": 2498.902702169773,
+        "confidence": 1.971545991960519e-22
+      }
+    ],
+    "clear_times": {
+      "19": 512.1747489999998,
+      "10": 1175.88116,
+      "20": 766.3969670000006,
+      "11": 708.6936619999988,
+      "6": 513.2967150000004,
+      "5": 839.5062419999995,
+      "15": 568.4602590000013,
+      "8": 547.0429199999999
+    },
+    "total_time": 49265.482114,
+    "clearing_ratio": 0.8461538461538461,
+    "average_clear_time": 703.93158425
+  },
+  "summary": {
+    "total_virtual_time": 49265.482114,
+    "clearing_ratio": 0.8461538461538461,
+    "success": false
+  }
+}

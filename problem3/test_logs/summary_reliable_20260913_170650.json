@@ -1,0 +1,95 @@
+{
+  "algorithm_version": "problem3-sector-v2",
+  "scan_points": 7,
+  "scanned_points": 7,
+  "discovered_channels": [
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    12,
+    13,
+    14,
+    15,
+    17,
+    18,
+    19
+  ],
+  "cleared_channels": [
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    12,
+    13,
+    14,
+    15,
+    17,
+    18,
+    19
+  ],
+  "unresolved_channels": [],
+  "completed": true,
+  "coverage_complete": true,
+  "completion_reason": "原点与六个环域分区全部取得覆盖证书，所有发现目标清除成功",
+  "total_virtual_time_s": 3746.125134,
+  "average_location_clear_time_s": 249.74167559999998,
+  "actual_total": null,
+  "official_clearance_ratio": null,
+  "actions": {
+    "measures": 110,
+    "clear_attempts": 20,
+    "clear_successes": 15,
+    "moves": 35,
+    "switches": 106
+  },
+  "phase_times": {
+    "integrated_s": 3746.125134
+  },
+  "fallback_calls": 0,
+  "fallback_points_pruned": 0,
+  "max_local_numeric_gap_m": 0.07880062483769734,
+  "speculative_attempts": 9,
+  "scan_positions": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      -562.4342738024201,
+      973.2789481694222
+    ],
+    [
+      -1391.4025671896154,
+      61.29586193151244
+    ],
+    [
+      -684.4585980228667,
+      -1071.08543885056
+    ],
+    [
+      610.5438493057051,
+      -1215.0279283043112
+    ],
+    [
+      1341.7313895783839,
+      -75.37547518862107
+    ],
+    [
+      812.245356007628,
+      1216.8555140605433
+    ]
+  ],
+  "uncovered_sectors": 0,
+  "error": null,
+  "exit_error": null,
+  "program_runtime_s": 0.23604079987853765
+}
